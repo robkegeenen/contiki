@@ -318,7 +318,7 @@ serialdumpall:
 ### UART_BAUDRATE: i.e., 115200. default is 1000000
 ### example: make TARGET=jn516x UART_BAUDRATE=115200 login MOTE=1
 
-UART_BAUDRATE ?= 1000000
+UART_BAUDRATE ?= 115200
 
 $(CONTIKI)/tools/tunslip6:	$(CONTIKI)/tools/tunslip6.c
 	($(MAKE) -C $(CONTIKI)/tools tunslip6 CFLAGS= LDFLAGS= LDLIBS= INCFLAGS=)
