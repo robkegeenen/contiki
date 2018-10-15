@@ -48,8 +48,12 @@ PROCESS_THREAD(hello_world_process, ev, data)
 {
   PROCESS_BEGIN();
 
-  printf("Hello, world\n");
-  
+  int i = 0;
+
+  while(1){
+    printf("%d: Hello, world!\r\n", i++);
+  }
+
   PROCESS_END();
 }
 /*---------------------------------------------------------------------------*/
