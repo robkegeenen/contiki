@@ -263,7 +263,7 @@ typedef uint32_t clock_time_t;
 #endif /* UART_XONXOFF_FLOW_CTRL */
 
 #ifndef UART_BAUD_RATE
-#define UART_BAUD_RATE UART_RATE_1000000
+#define UART_BAUD_RATE UART_RATE_115200
 #endif /* UART_BAUD_RATE */
 
 #ifndef UART1_BAUD_RATE
