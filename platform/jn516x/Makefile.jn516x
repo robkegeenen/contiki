@@ -258,7 +258,7 @@ endif
 symbols.c symbols.h:
 	@${CONTIKI}/tools/make-empty-symbols
 
-$(ENTERPROG):
+$(ENTERPROG): $(ENTERPROG).c
 	(cd $(dir $(ENTERPROG)); ${MAKE} $(notdir $(ENTERPROG)))
 
 ### Upload target to one jn516x mote specified by MOTE=portNumber
