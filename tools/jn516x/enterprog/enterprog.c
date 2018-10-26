@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <ftdi.h>
@@ -6,11 +7,22 @@
 
 #define BM_RESET 0b11000000
 #define BM_PROG  0b11000100
+#define BM_RUN   0b11001100
 
-int main(void){
+int main(int argc, const char* argv[]){
   struct ftdi_context *ftdi_list, *ftdi;
   struct ftdi_device_list *devlist, *cur_dev;
   int i, res;
+  unsigned char mode;
+  char *mode_str;
+  if((argc < 2) || (strcmp(argv[1], "run") != 0)){
+    mode = BM_PROG;
+    mode_str = "program";
+  }
+  else{
+    mode = BM_RUN;
+    mode_str = "run";
+  }
 
   ftdi_list = ftdi_new();
   if(!ftdi_list){
@@ -28,7 +40,7 @@ int main(void){
   cur_dev = devlist;
   i = 0;
   while(cur_dev){
-    printf("Entering programming mode on device: %d\n", i);
+    printf("Entering %s mode on device: %d\n", mode_str, i);
 
     ftdi = ftdi_new();
     if(!ftdi){
@@ -51,9 +63,9 @@ int main(void){
       continue;
     }
 
-    res = ftdi_set_bitmode(ftdi, BM_PROG, BITMODE_CBUS);
+    res = ftdi_set_bitmode(ftdi, mode, BITMODE_CBUS);
     if(res < 0){
-      fprintf(stderr, "Error forcing dongle in program mode: [%d] %d (%s)\n", i, res, ftdi_get_error_string(ftdi));
+      fprintf(stderr, "Error forcing dongle in %s mode: [%d] %d (%s)\n", mode_str, i, res, ftdi_get_error_string(ftdi));
       ftdi_usb_close(ftdi);
       ftdi_free(ftdi);
       continue;

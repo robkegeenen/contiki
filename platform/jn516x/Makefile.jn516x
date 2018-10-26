@@ -267,11 +267,13 @@ ifeq ($(HOST_OS),Windows)
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	${FLASH_PROGRAMMER} -a -c $(PORT) -B 1000000 -s -w -f $<
+	sudo ${ENTERPROG} run
 else
 %.upload: %.$(TARGET).bin $(ENTERPROG)
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	${FLASH_PROGRAMMER} -V 10 -v -s $(PORT) -I 38400 -P 1000000 -f $<
+	sudo ${ENTERPROG} run
 endif
 
 ### Flash the given file
@@ -280,11 +282,13 @@ ifeq ($(HOST_OS),Windows)
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	${FLASH_PROGRAMMER} -a -c $(PORT) -B 1000000 -s -w -f $*.$(TARGET).bin
+	sudo ${ENTERPROG} run
 else
 %.flash: ${FLASH_PROGRAMMER} $(ENTERPROG)
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	${FLASH_PROGRAMMER} -V 10 -v -s $(PORT) -I 38400 -P 1000000 -s -f $*.$(TARGET).bin
+	sudo ${ENTERPROG} run
 endif
 
 ### List the ports with connected jn516x motes
@@ -302,12 +306,14 @@ motelistinfo:
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	$(Q)$(MOTELIST) ${FLASH_PROGRAMMER} $<
+	sudo ${ENTERPROG} run
 
 ### Flash the given file to all connected jn516x motes
 %.flashall: $(ENTERPROG)
 	sudo ${ENTERPROG}
 	${ENTERPROGSLEEP}
 	$(Q)$(MOTELIST) ${FLASH_PROGRAMMER} $*
+	sudo ${ENTERPROG} run
 
 ### Dump output from all connected jn516x motes
 serialdumpall:
