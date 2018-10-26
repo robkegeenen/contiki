@@ -10,37 +10,39 @@
 PROCESS(main_proc, "");
 AUTOSTART_PROCESSES(&main_proc);
 
-#define TYPE_SERVER -1
+#define TYPE_PROD     0
+#define TYPE_SERVER  -1
 #define TYPE_INVALID -2
 typedef struct{
   const char *name;
-  uint32_t count;
+  uint32_t item_count;
   uint32_t seq;
   uint32_t ack_count;
 }item_t;
 item_t item_list[] = {
-  {"banana", 1, 0, 0},
+  {"banana", 0, 0, 0},
   {"apple", 0, 0, 0},
-  {"pear", 1, 0, 0},
+  {"pear", 0, 0, 0},
   {NULL, 0, 0, 0}
 };
 int32_t node_type = TYPE_INVALID;
-uint16_t addr_u16 = 0;
+uint16_t node_addr = 0;
 uint32_t seq = 1;
+bool picked = FALSE;
+
+#define CHANNEL 136
+#define SEND_TIME_MAX (CLOCK_SECOND / 2)
 
 #define CMD_PRICE 0
 #define CMD_ACK 1
 #define CMD_PICK 2
 
-#define CHANNEL 136
-#define SEND_TIME_MAX (CLOCK_SECOND / 2)
-
-const size_t command_argc = 2;
+#define SCMD_ARGC 4
 typedef struct{
   uint32_t cmd;
   uint32_t seq;
   uint16_t addr;
-  uint32_t argv[2];
+  uint32_t argv[SCMD_ARGC];
 }command_t;
 
 static int32_t str2prod(const char *str){
@@ -68,10 +70,10 @@ static void prompt(void){
 }
 
 static uint32_t packet_prep(command_t *cmd){
-  cmd->seq = seq++;
-  cmd->addr = (uint32_t)addr_u16;
+  cmd->seq = seq;
+  cmd->addr = (uint32_t)node_addr;
   packetbuf_copyfrom(cmd, sizeof(*cmd));
-  return(seq);
+  return(seq++);
 }
 
 static int packet_send(struct polite_conn *c, command_t *cmd){
@@ -85,16 +87,54 @@ static void recv(struct polite_conn *c){
   packetbuf_copyto(data);
   command_t *orig = (command_t*)data;
   send_ack = FALSE;
-  //TODO: Update ack count in list if orig->cmd == CMD_ACK (check seq)
-  if((orig->cmd == CMD_PRICE) && (orig->argv[0] == node_type) && (orig->seq > price_seq)){
-    printf("\nPrice set to %lu!\n", orig->argv[1]);
+  if((node_type == TYPE_SERVER) &&
+     (orig->cmd == CMD_ACK) &&
+     (orig->argv[1] == CMD_PRICE)){
+    item_t *it = &item_list[orig->argv[3]];
+    if(orig->argv[2] == it->seq){
+      it->ack_count++;
+    }
+    if(it->ack_count >= it->item_count){
+      it->item_count = it->ack_count;
+      printf("\nAll %lu products of type %s have the latest price\n", it->item_count, it->name);
+      prompt();
+    }
+  }
+  if((node_type >= TYPE_PROD) &&
+     (orig->cmd == CMD_ACK) &&
+     (orig->argv[0] == (uint32_t)node_addr) &&
+     (orig->argv[1] == CMD_PICK)){
+    picked = TRUE;
+    process_post(&main_proc, PROCESS_EVENT_CONTINUE, NULL);
+    printf("\nReceived pick acknowledgement\n");
+    prompt();
+  }
+  if((node_type >= TYPE_PROD) &&
+     (orig->cmd == CMD_PRICE) &&
+     (orig->argv[0] == node_type) &&
+     (orig->seq > price_seq)){
+    printf("\nPrice set to %lu\n", orig->argv[1]);
+    prompt();
+    send_ack = TRUE;
+  }
+  if((node_type == TYPE_SERVER) &&
+     (orig->cmd == CMD_PICK)){
+    item_t *it = &item_list[orig->argv[0]];
+    if(it->item_count > 0){
+      it->item_count--;
+    }
+    printf("\nProduct of type %s has been picked\n", it->name);
     prompt();
     send_ack = TRUE;
   }
   if(send_ack){
     command_t cmd;
     cmd.cmd = CMD_ACK;
-    cmd.argv[0] = orig->seq;
+    cmd.argv[0] = orig->addr;
+    cmd.argv[1] = orig->cmd;
+    cmd.argv[2] = orig->seq;
+    cmd.argv[3] = node_type;
+    packet_prep(&cmd);
     packet_send(c, &cmd);
   }
 }
@@ -109,20 +149,22 @@ static const struct polite_callbacks callbacks = {recv, sent, dropped};
 
 PROCESS_THREAD(main_proc, ev, data){
   static struct polite_conn c;
+  static struct etimer et;
   const uint8_t argc = 3;
   uint8_t argi;
   char *argv[argc], *pch;
+  static char *msg;
 
   PROCESS_EXITHANDLER(polite_close(&c));
   PROCESS_BEGIN();
 
-  addr_u16 = *(uint16_t*)(&linkaddr_node_addr);
-  switch(addr_u16){
+  node_addr = *(uint16_t*)(&linkaddr_node_addr);
+  switch(node_addr){
     case 0x23FA:
       node_type = TYPE_SERVER;
       break;
     case 0x33FA:
-      node_type = str2prod("banana");
+      node_type = str2prod("pear");
       break;
     case 0x0CFA:
       node_type = str2prod("pear");
@@ -134,16 +176,30 @@ PROCESS_THREAD(main_proc, ev, data){
   polite_open(&c, CHANNEL, &callbacks);
 
   for(;;){
-    if(node_type == TYPE_INVALID){
-      static struct etimer et;
+    if(node_type <= TYPE_INVALID){
+      msg = "Invalid node settings";
       etimer_set(&et, CLOCK_SECOND);
+    }
+    else if(picked){
+      msg = "Item has been picked";
+      etimer_set(&et, CLOCK_SECOND);
+    }
+    else{
+      msg = NULL;
+    }
+    if(msg){
+      polite_close(&c);
+      printf("\n");
       for(;;){
+        printf("%s!\n", msg);
         PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
-        printf("Settings invalid!\n");
         etimer_reset(&et);
       }
     }
-    PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);
+    PROCESS_WAIT_EVENT_UNTIL((ev == serial_line_event_message) || (ev == PROCESS_EVENT_CONTINUE));
+    if(ev == PROCESS_EVENT_CONTINUE){
+      continue;
+    }
     argi = 0;
     pch = strtok((char*)data, " ");
     while(pch && argi < argc){
@@ -151,33 +207,43 @@ PROCESS_THREAD(main_proc, ev, data){
       argi++;
       pch = strtok(NULL, " ");
     }
-
     //Formats:
     //price <product type> <new price>
     //pick
     if(argi > 0){
-      if((strcmp(argv[0], "price") == 0) && (node_type == TYPE_SERVER)){
+      if((node_type == TYPE_SERVER) &&
+         (strcmp(argv[0], "price") == 0)){
         if(argi == 3){
+          int32_t prod = str2prod(argv[1]);
+          uint32_t price = atoll(argv[2]);
+          if(prod < TYPE_PROD){
+            printf("Invalid product!\n");
+            continue;
+          }
+          printf("Setting price of products of type %s to %lu\n", item_list[prod].name, price);
           command_t cmd;
           cmd.cmd = CMD_PRICE;
-          cmd.argv[0] = str2prod(argv[1]);
-          cmd.argv[1] = atoll(argv[2]);
-          //Do error checking?
+          cmd.argv[0] = (uint32_t)prod;
+          cmd.argv[1] = price;
           item_list[cmd.argv[0]].ack_count = 0;
           item_list[cmd.argv[0]].seq = packet_prep(&cmd);
           packet_send(&c, &cmd);
         }
       }
-      else if((strcmp(argv[0], "pick") == 0) && (node_type != TYPE_SERVER)){
-        //
-        printf("Pick event!\n");
-        //zoek uit
+      else if((node_type >= TYPE_PROD) &&
+              (strcmp(argv[0], "pick") == 0)){
+        printf("Item has been picked\n");
+        command_t cmd;
+        cmd.cmd = CMD_PICK;
+        cmd.argv[0] = (uint32_t)node_type;
+        packet_prep(&cmd);
+        packet_send(&c, &cmd);
       }
       else{
         printf("Invalid command!\n");
       }
     }
-    prompt();
+  prompt();
   }
   PROCESS_END();
 }
