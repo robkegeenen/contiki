@@ -1,7 +1,7 @@
 #ifndef __PROJECT_CONF_H__
 #define __PROJECT_CONF_H__
 
-#undef IEEE802154_CONF_PANID //KANKER CONTIKI!!!
+#undef IEEE802154_CONF_PANID     //KANKER CONTIKI!!!
 
 #define NETSTACK_CONF_RDC        nullrdc_driver
 #define NETSTACK_CONF_MAC        csma_driver
@@ -10,6 +10,5 @@
 #define IEEE802154_CONF_PANID    0xDEAD
 #define NETSTACK_CONF_WITH_IPV4  0
 #define NETSTACK_CONF_WITH_IPV6  0
-
 
 #endif /* __PROJECT_CONF_H__ */
