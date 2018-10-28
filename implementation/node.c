@@ -20,8 +20,8 @@ typedef struct{
   uint32_t ack_count;
 }item_t;
 item_t item_list[] = {
-  {"banana", 0, 0, 0},
   {"apple", 0, 0, 0},
+  {"banana", 0, 0, 0},
   {"pear", 0, 0, 0},
   {NULL, 0, 0, 0}
 };
@@ -160,13 +160,34 @@ PROCESS_THREAD(main_proc, ev, data){
 
   node_addr = *(uint16_t*)(&linkaddr_node_addr);
   switch(node_addr){
-    case 0x23FA:
+    case 0x35DE:
       node_type = TYPE_SERVER;
       break;
-    case 0x33FA:
-      node_type = str2prod("pear");
+    case 0xC8F9:
+      node_type = str2prod("apple");
+      break;
+    //case 0xC?F9:
+    //  node_type = str2prod("apple");
+    //  break;
+    case 0xEAF9:
+      node_type = str2prod("apple");
+      break;
+    case 0xEEF9:
+      node_type = str2prod("banana");
+      break;
+    case 0xF2F9:
+      node_type = str2prod("banana");
+      break;
+    case 0xFEF9:
+      node_type = str2prod("banana");
       break;
     case 0x0CFA:
+      node_type = str2prod("pear");
+      break;
+    case 0x23FA:
+      node_type = str2prod("pear");
+      break;
+    case 0x33FA:
       node_type = str2prod("pear");
       break;
     default:
