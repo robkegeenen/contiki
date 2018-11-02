@@ -4,11 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "net/netstack.h"
+#include "core/dev/leds.h"
 
 #include "project-conf.h"
 
 PROCESS(main_proc, "");
-AUTOSTART_PROCESSES(&main_proc);
+PROCESS(led_proc, "");
+AUTOSTART_PROCESSES(&main_proc, &led_proc);
 
 #define TYPE_PROD     0
 #define TYPE_SERVER  -1
@@ -30,8 +33,12 @@ uint16_t node_addr = 0;
 uint32_t seq = 1;
 bool picked = FALSE;
 
+uint32_t tstamp = 0;
+#define GET_DUR() ((clock_time() - tstamp) * 1000 / CLOCK_SECOND)
+#define GET_TIME() clock_time()
+
 #define CHANNEL 136
-#define SEND_TIME_MAX (CLOCK_SECOND / 2)
+#define SEND_TIME_MAX (CLOCK_SECOND / 4)
 
 #define CMD_PRICE 0
 #define CMD_ACK 1
@@ -96,9 +103,9 @@ static void recv(struct polite_conn *c){
     }
     if(it->ack_count >= it->item_count){
       it->item_count = it->ack_count;
-      printf("\nAll %lu products of type %s have the latest price\n", it->item_count, it->name);
-      prompt();
     }
+    printf("\n%lu/%lu products of type %s have the latest price, took %lu ms\n", it->ack_count, it->item_count, it->name, GET_DUR());
+    prompt();
   }
   if((node_type >= TYPE_PROD) &&
      (orig->cmd == CMD_ACK) &&
@@ -106,7 +113,7 @@ static void recv(struct polite_conn *c){
      (orig->argv[1] == CMD_PICK)){
     picked = TRUE;
     process_post(&main_proc, PROCESS_EVENT_CONTINUE, NULL);
-    printf("\nReceived pick acknowledgement\n");
+    printf("\nReceived pick acknowledgement, took %lu ms\n", GET_DUR());
     prompt();
   }
   if((node_type >= TYPE_PROD) &&
@@ -147,6 +154,53 @@ static void dropped(struct polite_conn *c){
 
 static const struct polite_callbacks callbacks = {recv, sent, dropped};
 
+PROCESS_THREAD(led_proc, ev, data){
+  static struct etimer et;
+  static bool init_done;
+  PROCESS_BEGIN();
+  leds_init();
+  init_done = FALSE;
+  etimer_set(&et, CLOCK_SECOND / 10);
+  for(;;){
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+    if(!init_done){
+      leds_off(LEDS_ALL);
+      switch(node_type){
+        case TYPE_SERVER:
+          break;
+        case 0: //apple
+          break;
+        case 1: //banana
+          leds_on(LEDS_GREEN);
+          break;
+        case 2: //pear
+          leds_on(LEDS_GREEN);
+          break;
+        default:
+          break;
+      }
+      init_done = TRUE;
+    }
+    switch(node_type){
+      case TYPE_SERVER:
+        break;
+      case 0: //apple
+        leds_toggle(LEDS_RED);
+        break;
+      case 1: //banana
+        leds_toggle(LEDS_GREEN);
+        break;
+      case 2: //pear
+        leds_toggle(LEDS_RED | LEDS_GREEN);
+        break;
+      default:
+        break;
+    }
+    etimer_reset(&et);
+  }
+  PROCESS_END();
+}
+
 PROCESS_THREAD(main_proc, ev, data){
   static struct polite_conn c;
   static struct etimer et;
@@ -163,12 +217,12 @@ PROCESS_THREAD(main_proc, ev, data){
     case 0x35DE:
       node_type = TYPE_SERVER;
       break;
-    case 0xC8F9:
+    case 0xC4F9:
       node_type = str2prod("apple");
       break;
-    //case 0xC?F9:
-    //  node_type = str2prod("apple");
-    //  break;
+    case 0xCBF9:
+      node_type = str2prod("apple");
+      break;
     case 0xEAF9:
       node_type = str2prod("apple");
       break;
@@ -194,8 +248,8 @@ PROCESS_THREAD(main_proc, ev, data){
       node_type = TYPE_INVALID;
       break;
   }
+  NETSTACK_RADIO.set_value(RADIO_PARAM_TXPOWER, -128);
   polite_open(&c, CHANNEL, &callbacks);
-
   for(;;){
     if(node_type <= TYPE_INVALID){
       msg = "Invalid node settings";
@@ -239,8 +293,10 @@ PROCESS_THREAD(main_proc, ev, data){
           uint32_t price = atoll(argv[2]);
           if(prod < TYPE_PROD){
             printf("Invalid product!\n");
+            prompt();
             continue;
           }
+          tstamp = GET_TIME();
           printf("Setting price of products of type %s to %lu\n", item_list[prod].name, price);
           command_t cmd;
           cmd.cmd = CMD_PRICE;
@@ -253,6 +309,7 @@ PROCESS_THREAD(main_proc, ev, data){
       }
       else if((node_type >= TYPE_PROD) &&
               (strcmp(argv[0], "pick") == 0)){
+        tstamp = GET_TIME();
         printf("Item has been picked\n");
         command_t cmd;
         cmd.cmd = CMD_PICK;
