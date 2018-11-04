@@ -38,6 +38,9 @@ uint32_t tstamp = 0;
 #define GET_TIME() clock_time()
 
 #define CHANNEL 136
+#define OUTPUT_POWER_MAX (0)
+#define OUTPUT_POWER_MIN (-32)
+#define TX_POWER OUTPUT_POWER_MIN
 #define SEND_TIME_MAX (CLOCK_SECOND / 4)
 
 #define CMD_PRICE 0
@@ -248,7 +251,7 @@ PROCESS_THREAD(main_proc, ev, data){
       node_type = TYPE_INVALID;
       break;
   }
-  NETSTACK_RADIO.set_value(RADIO_PARAM_TXPOWER, -128);
+  NETSTACK_RADIO.set_value(RADIO_PARAM_TXPOWER, TX_POWER);
   polite_open(&c, CHANNEL, &callbacks);
   for(;;){
     if(node_type <= TYPE_INVALID){
